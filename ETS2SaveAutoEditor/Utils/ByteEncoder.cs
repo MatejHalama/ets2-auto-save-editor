@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -84,76 +85,36 @@ namespace ASE.Utils {
             return buf;
         }
 
-        public static short DecodeInt16(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if(BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToInt16(buf);
+        public static short DecodeInt16(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadInt16LittleEndian(buf) : BinaryPrimitives.ReadInt16BigEndian(buf);
         }
 
-        public static ushort DecodeUInt16(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToUInt16(buf);
+        public static ushort DecodeUInt16(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadUInt16LittleEndian(buf) : BinaryPrimitives.ReadUInt16BigEndian(buf);
         }
 
-        public static int DecodeInt32(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToInt32(buf);
+        public static int DecodeInt32(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadInt32LittleEndian(buf) : BinaryPrimitives.ReadInt32BigEndian(buf);
         }
 
-        public static uint DecodeUInt32(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToUInt32(buf);
+        public static uint DecodeUInt32(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadUInt32LittleEndian(buf) : BinaryPrimitives.ReadUInt32BigEndian(buf);
         }
 
-        public static long DecodeInt64(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToInt64(buf);
+        public static long DecodeInt64(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadInt64LittleEndian(buf) : BinaryPrimitives.ReadInt64BigEndian(buf);
         }
 
-        public static ulong DecodeUInt64(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToUInt64(buf);
+        public static ulong DecodeUInt64(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadUInt64LittleEndian(buf) : BinaryPrimitives.ReadUInt64BigEndian(buf);
         }
 
-        public static Int128 DecodeInt128(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (buf.Length != 16) {
-                throw new ArgumentException("buf must be 16 bytes long");
-            }
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            UInt128 result = 0;
-            for (int i = 15; i >= 0; i--) {
-                result <<= 8;
-                result |= buf[i];
-            }
-            return (Int128)result;
+        public static Int128 DecodeInt128(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadInt128LittleEndian(buf) : BinaryPrimitives.ReadInt128BigEndian(buf);
         }
 
-        public static UInt128 DecodeUInt128(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (buf.Length != 16) {
-                throw new ArgumentException("buf must be 16 bytes long");
-            }
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            UInt128 result = 0;
-            for (int i = 15; i >= 0; i--) {
-                result <<= 8;
-                result |= buf[i];
-            }
-            return result;
+        public static UInt128 DecodeUInt128(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadUInt128LittleEndian(buf) : BinaryPrimitives.ReadUInt128BigEndian(buf);
         }
 
         public static byte[] EncodeFloat(float a, ByteOrder endian = ByteOrder.LittleEndian) {
@@ -172,18 +133,12 @@ namespace ASE.Utils {
             return buf;
         }
 
-        public static float DecodeFloat(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToSingle(buf);
+        public static float DecodeFloat(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadSingleLittleEndian(buf) : BinaryPrimitives.ReadSingleBigEndian(buf);
         }
 
-        public static double DecodeDouble(byte[] buf, ByteOrder endian = ByteOrder.LittleEndian) {
-            if (BitConverter.IsLittleEndian != (endian == ByteOrder.LittleEndian)) {
-                buf = buf.Reverse().ToArray();
-            }
-            return BitConverter.ToDouble(buf);
+        public static double DecodeDouble(Span<byte> buf, ByteOrder endian = ByteOrder.LittleEndian) {
+            return endian == ByteOrder.LittleEndian ? BinaryPrimitives.ReadDoubleLittleEndian(buf) : BinaryPrimitives.ReadDoubleBigEndian(buf);
         }
     }
 }

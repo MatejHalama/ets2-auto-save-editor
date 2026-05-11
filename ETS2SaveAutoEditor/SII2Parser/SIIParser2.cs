@@ -1,4 +1,4 @@
-﻿using ASE.Utils;
+using ASE.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -163,16 +163,15 @@ namespace ASE.SII2Parser {
 
         private int RemainingBytes => data.Length - offset;
 
-        private byte[] NextBuffer(int n) {
+        private Span<byte> NextBuffer(int n) {
             if (n < 0) {
                 throw new ArgumentException("Invalid read length");
             }
             if (offset + n > data.Length) {
                 throw new ArgumentException("End of data reached");
             }
-            byte[] result = data[offset..(offset + n)];
             offset += n;
-            return result;
+            return data.AsSpan(offset - n, n);
         }
 
         private byte NextBuffer() {
@@ -626,7 +625,7 @@ namespace ASE.SII2Parser {
         }
 
         private SII2 GetParsed() { // This function is to be called only once in the lifetime of the object. Since this is private, we can assume that it's safe.
-            byte[] header = NextBuffer(4);
+            var header = NextBuffer(4);
             if (!header.SequenceEqual(SIIParser2.HEADER_BINARY)) {
                 throw new ArgumentException("Data is not BSII");
             }
@@ -872,7 +871,7 @@ namespace ASE.SII2Parser {
                     s += $"{enumName}={enumValue}, ";
                 }
 
-                s = s[..^2];
+                s = s[..^2]; // Remove the last ", "
 
                 return "enum<" + s + ">";
             }
@@ -886,7 +885,7 @@ namespace ASE.SII2Parser {
                     s += $"{enumName}={enumValue}, ";
                 }
 
-                s = s[..^2];
+                s = s[..^2]; // Remove the last ", "
 
                 return "enum<" + s + ">[]";
             }
