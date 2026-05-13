@@ -1,4 +1,4 @@
-﻿using ASE.Utils;
+using ASE.Utils;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -15,7 +15,7 @@ using static System.Net.Mime.MediaTypeNames;
 namespace ASE.Utils {
     internal class SCSSpecialString {
         public static float ParseScsFloat(string data) {
-            if (data.StartsWith("&", StringComparison.InvariantCulture)) {
+            if (data.StartsWith('&')) {
                 byte[] bytes = new byte[4];
                 for (int i = 0; i < 4; i++) {
                     bytes[i] = byte.Parse(data.Substring(i * 2 + 1, 2), System.Globalization.NumberStyles.HexNumber);
@@ -40,7 +40,7 @@ namespace ASE.Utils {
         }
 
         public static float[] DecodeSCSPosition(string placement) {
-            var a = placement.Split(new string[] { "(", ")", ",", ";" }, StringSplitOptions.RemoveEmptyEntries);
+            var a = placement.Split(["(", ")", ",", ";"], StringSplitOptions.RemoveEmptyEntries);
             var q = from v in a select v.Trim() into b where b.Length > 0 select ParseScsFloat(b);
 
             var arr = q.ToArray();
@@ -79,30 +79,23 @@ namespace ASE.Utils {
     }
 
     internal class HexEncoder {
-        public static string ByteArrayToHexString(byte[] byteArray) {
-            return BitConverter.ToString(byteArray).Replace("-", string.Empty, StringComparison.InvariantCulture);
+        public static string ByteArrayToHexString(Span<byte> byteArray) {
+            return Convert.ToHexString(byteArray);
         }
 
         public static byte[] HexStringToByteArray(string hexString) {
-            int byteCount = hexString.Length / 2;
-            byte[] byteArray = new byte[byteCount];
-
-            for (int i = 0; i < byteCount; i++) {
-                byteArray[i] = Convert.ToByte(hexString.Substring(i * 2, 2), 16);
-            }
-
-            return byteArray;
+            return Convert.FromHexString(hexString);
         }
     }
 
-    internal class SCSSaveHexEncodingSupport {
+    internal partial class SCSSaveHexEncodingSupport {
 
         public static string GetUnescapedSaveName(string originalString) {
             originalString = originalString.Replace("@@noname_save_game@@", "Quick Save", StringComparison.InvariantCulture);
             if (originalString.Length == 0) {
                 originalString = "[Autosave]";
             }
-            var ml = Regex.Matches(originalString, @"(?<=[^\\]|^)\\");
+            var ml = EscapeHexPattern().Matches(originalString);
             var hexString = "";
             for (int i = 0; i < originalString.Length; i++) {
                 var found = false;
@@ -117,7 +110,7 @@ namespace ASE.Utils {
                 }
                 if (!found) {
                     byte[] stringBytes = Encoding.UTF8.GetBytes(ch + "");
-                    StringBuilder sbBytes = new StringBuilder(stringBytes.Length * 2);
+                    StringBuilder sbBytes = new(stringBytes.Length * 2);
                     foreach (byte b in stringBytes) {
                         sbBytes.AppendFormat("{0:X2}", b);
                     }
@@ -131,7 +124,7 @@ namespace ASE.Utils {
         public static string GetEscapedSaveName(string rawString) {
             byte[] utf8Bytes = Encoding.UTF8.GetBytes(rawString);
 
-            StringBuilder stringBuilder = new StringBuilder();
+            StringBuilder stringBuilder = new();
 
             foreach (byte b in utf8Bytes) {
                 stringBuilder.Append("\\x");
@@ -140,6 +133,9 @@ namespace ASE.Utils {
 
             return stringBuilder.ToString();
         }
+
+        [GeneratedRegex(@"(?<=[^\\]|^)\\")]
+        private static partial Regex EscapeHexPattern();
     }
     public class AlphabetEncoder {
         public static string Encode(string input) {
@@ -213,17 +209,16 @@ namespace ASE.Utils {
         private static byte[] GenerateLength(string rawString, int bytes) {
             var data = Encoding.UTF8.GetBytes(rawString);
             int dataBytes = data.Length;
-            using (SHA256 sha256 = SHA256.Create()) {
-                byte[] arr = new byte[bytes];
-                int offset = 0;
-                while (offset < bytes) {
-                    int length = Math.Min(dataBytes, bytes - offset);
-                    Buffer.BlockCopy(data, 0, arr, offset, length);
-                    offset += length;
-                }
-
-                return arr;
+            using SHA256 sha256 = SHA256.Create();
+            byte[] arr = new byte[bytes];
+            int offset = 0;
+            while (offset < bytes) {
+                int length = Math.Min(dataBytes, bytes - offset);
+                Buffer.BlockCopy(data, 0, arr, offset, length);
+                offset += length;
             }
+
+            return arr;
         }
 
         public Aes AES;

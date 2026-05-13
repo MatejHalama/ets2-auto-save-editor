@@ -1,39 +1,45 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace ASE.Utils {
-    class SCSMemoryReader {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+    [SupportedOSPlatform("Windows")]
+    partial class SCSMemoryReader {
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        private static partial IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, int dwProcessId);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out int lpNumberOfBytesRead);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, [Out] byte[] lpBuffer, uint nSize, out int lpNumberOfBytesRead);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out IntPtr lpNumberOfBytesWritten);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, [In] byte[] lpBuffer, uint nSize, out IntPtr lpNumberOfBytesWritten);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool CloseHandle(IntPtr hObject);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool CloseHandle(IntPtr hObject);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        private static partial IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint dwFreeType);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint dwFreeType);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        private static partial IntPtr GetModuleHandleW([MarshalAs(UnmanagedType.LPWStr)] string lpModuleName);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        private static partial IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpModuleName);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, out IntPtr lpThreadId);
+        [LibraryImport("kernel32.dll", SetLastError = true)]
+        private static partial IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, out IntPtr lpThreadId);
 
         // The extern functions above have two purposes:
         // - Read/Write of a process memory
@@ -67,7 +73,7 @@ namespace ASE.Utils {
                 throw new NotSupportedException("Only 64-bit systems are supported.");
 
             byte[] buffer = ReadBuffer(processHandle, address, IntPtr.Size);
-            return (IntPtr)BitConverter.ToInt64(buffer, 0); // Assume 64-bit process
+            return (nint)BitConverter.ToInt64(buffer, 0); // Assume 64-bit process
         }
 
         private readonly string ProcessName;
@@ -90,9 +96,7 @@ namespace ASE.Utils {
         }
 
         public IntPtr GetBaseAddress(string? moduleName) {
-            if (moduleName == null) {
-                moduleName = ProcessName + ".exe";
-            }
+            moduleName ??= ProcessName + ".exe";
             IntPtr baseAddress = GetModuleBaseAddress(ProcessName, moduleName);
             if (baseAddress == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to get module base address.");
@@ -162,7 +166,7 @@ namespace ASE.Utils {
                 return false;
             }
 
-            IntPtr hKernel32 = GetModuleHandle("kernel32.dll");
+            IntPtr hKernel32 = GetModuleHandleW("kernel32.dll");
             IntPtr hLoadLibrary = GetProcAddress(hKernel32, "LoadLibraryW");
             if (hLoadLibrary == IntPtr.Zero) {
                 VirtualFreeEx(hProcess, allocMemAddr, 0, 0x8000); // MEM_RELEASE

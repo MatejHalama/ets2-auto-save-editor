@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -21,29 +22,33 @@ namespace ASE.Utils {
             MemoryStream ms1 = new();
             BinaryWriter bs1 = new(ms1);
             {
-                byte[] versionBuf = BitConverter.GetBytes(POSITION_DATA_VERSION);
-                if (!BitConverter.IsLittleEndian) { // Reverse the byte order if the system is big-endian.
-                    Array.Reverse(versionBuf);
-                }
+                Span<byte> versionBuf = stackalloc byte[4];
+                BinaryPrimitives.WriteInt32LittleEndian(versionBuf, POSITION_DATA_VERSION);
                 bs1.Write(versionBuf);
             }
 
-            MemoryStream ms2 = new MemoryStream();
+            MemoryStream ms2 = new();
 
             void sendPlacement(float[] p) {
                 if (data.MinifiedOrientation) {
-                    for (int i = 0; i < 4; i++)
-                        ms2.Write(ByteEncoder.EncodeFloat(p[i], ByteOrder.BigEndian));
+                    Span<byte> buf4 = stackalloc byte[20];
+                    for (int i = 0; i < 4; i++) {
+                        BinaryPrimitives.WriteSingleBigEndian(buf4[(i * 4)..], p[i]);
+                    }
 
-                    ms2.Write(ByteEncoder.EncodeFloat(p[5], ByteOrder.BigEndian));
+                    BinaryPrimitives.WriteSingleBigEndian(buf4[16..], p[5]);
+                    ms2.Write(buf4);
                 } else {
-                    for (int i = 0; i < 7; i++)
-                        ms2.Write(ByteEncoder.EncodeFloat(p[i], ByteOrder.BigEndian));
+                    Span<byte> buf4 = stackalloc byte[28];
+                    for (int i = 0; i < 7; i++) {
+                        BinaryPrimitives.WriteSingleBigEndian(buf4[(i * 4)..], p[i]);
+                    }
+                    ms2.Write(buf4);
                 }
             }
 
             // Header byte
-            ms2.WriteByte((byte)((data.Positions.Count & 0b00111111) | (data.TrailerConnected ? 1 << 7 : 0) | (data.MinifiedOrientation ? 1 << 6 : 0)));
+            ms2.WriteByte((byte)((data.Positions.Count & 0b00111111) | (data.TrailerConnected ? 0b01000000 : 0) | (data.MinifiedOrientation ? 0b10000000 : 0)));
             foreach (float[] p in data.Positions) {
                 sendPlacement(p);
             }
@@ -60,7 +65,7 @@ namespace ASE.Utils {
             // Base32768 is our own encoding to minimize the length of the visible string.
             byte[] data = Base32768.DecodeBase32768(encoded);
 
-            List<float[]> placements = new List<float[]>();
+            var placements = new List<float[]>();
 
             MemoryStream ms1 = new(data);
             BinaryReader bs1 = new(ms1);
@@ -108,7 +113,7 @@ namespace ASE.Utils {
                 if (minifiedOrientation) {
                     for (int i = 0; i < 5; i++) {
                         byte[] bytes = bs2.ReadBytes(4);
-                        result[i] = ByteEncoder.DecodeFloat(bytes, ByteOrder.BigEndian);
+                        result[i] = BinaryPrimitives.ReadSingleBigEndian(bytes);
                     }
                     result[5] = result[4];
                     result[4] = 0;
@@ -116,7 +121,7 @@ namespace ASE.Utils {
                 } else {
                     for (int i = 0; i < 7; i++) {
                         byte[] bytes = bs2.ReadBytes(4);
-                        result[i] = ByteEncoder.DecodeFloat(bytes, ByteOrder.BigEndian);
+                        result[i] = BinaryPrimitives.ReadSingleBigEndian(bytes);
                     }
                 }
                 return result;
@@ -143,15 +148,17 @@ namespace ASE.Utils {
 
         public static string EncodeNavigationCode(NavigationData data) {
             MemoryStream ms1 = new();
-            ms1.Write(ByteEncoder.EncodeUInt32(NAVIGATION_DATA_VERSION, ByteOrder.LittleEndian));
+            Span<byte> buf = stackalloc byte[4];
+            BinaryPrimitives.WriteUInt32LittleEndian(buf, NAVIGATION_DATA_VERSION);
+            ms1.Write(buf);
 
-            MemoryStream ms2 = new MemoryStream();
+            MemoryStream ms2 = new();
 
-            void WritePoint((byte, int, int, int) p) {
-                ms2.WriteByte(p.Item1);
-                ms2.Write(ByteEncoder.EncodeInt32(p.Item2, ByteOrder.LittleEndian));
-                ms2.Write(ByteEncoder.EncodeInt32(p.Item3, ByteOrder.LittleEndian));
-                ms2.Write(ByteEncoder.EncodeInt32(p.Item4, ByteOrder.LittleEndian));
+            static void WritePoint((byte, int, int, int) p, Span<byte> buf) {
+                buf[0] = p.Item1;
+                BinaryPrimitives.WriteInt32LittleEndian(buf[1..5], p.Item2);
+                BinaryPrimitives.WriteInt32LittleEndian(buf[5..9], p.Item3);
+                BinaryPrimitives.WriteInt32LittleEndian(buf[9..13], p.Item4);
             }
 
             // You can only have up to 10 waypoints, and 11 if there's forced destination. Therefore 4 bits are enough.
@@ -160,22 +167,25 @@ namespace ASE.Utils {
             // Similarly, there can only be 10 avoid points. Therefore 4 bits are enough.
 
             // Write waypoints behind
-            ms2.WriteByte((byte)(data.WaypointBehind.Count & 0xFF));
+            Span<byte> buf2 = stackalloc byte[3 + (data.WaypointBehind.Count + data.WaypointAhead.Count + data.Avoid.Count) * 13];
+            var buf3 = buf2;
+            buf3[0] = (byte)(data.WaypointBehind.Count & 0xFF); buf3 = buf3[1..];
             foreach (var p in data.WaypointBehind) {
-                WritePoint(p);
+                WritePoint(p, buf3); buf3 = buf3[13..];
             }
 
             // Write waypoints ahead
-            ms2.WriteByte((byte)(data.WaypointAhead.Count & 0xFF));
+            buf3[0] = (byte)(data.WaypointAhead.Count & 0xFF); buf3 = buf3[1..];
             foreach (var p in data.WaypointAhead) {
-                WritePoint(p);
+                WritePoint(p, buf3); buf3 = buf3[13..];
             }
 
             // Write avoid points
-            ms2.WriteByte((byte)(data.Avoid.Count & 0xFF));
+            buf3[0] = (byte)(data.Avoid.Count & 0xFF); buf3 = buf3[1..];
             foreach (var p in data.Avoid) {
-                WritePoint(p);
+                WritePoint(p, buf3); buf3 = buf3[13..];
             }
+            ms2.Write(buf2);
 
             ms2.Close();
 
@@ -196,7 +206,7 @@ namespace ASE.Utils {
             BinaryReader bs1 = new(ms1);
 
             // Compatibility layer.
-            uint version = ByteEncoder.DecodeUInt32(bs1.ReadBytes(4), ByteOrder.LittleEndian);
+            uint version = BinaryPrimitives.ReadUInt32LittleEndian(bs1.ReadBytes(4));
 
             if (version != NAVIGATION_DATA_VERSION) {
                 throw new IOException("incompatible version");
@@ -209,17 +219,18 @@ namespace ASE.Utils {
             BinaryReader bs2 = new(ms2);
 
             // Data exchange
-            (byte, int, int, int) ReceivePoint() {
-                byte a = bs2.ReadByte();
-                int b = ByteEncoder.DecodeInt32(bs2.ReadBytes(4), ByteOrder.LittleEndian);
-                int c = ByteEncoder.DecodeInt32(bs2.ReadBytes(4), ByteOrder.LittleEndian);
-                int d = ByteEncoder.DecodeInt32(bs2.ReadBytes(4), ByteOrder.LittleEndian);
+            static (byte, int, int, int) ReceivePoint() {
+                Span<byte> buf = stackalloc byte[13];
+                byte a = buf[0];
+                int b = BinaryPrimitives.ReadInt32LittleEndian(buf[1..5]);
+                int c = BinaryPrimitives.ReadInt32LittleEndian(buf[5..9]);
+                int d = BinaryPrimitives.ReadInt32LittleEndian(buf[9..13]);
                 return (a, b, c, d);
             }
 
-            List<(byte, int, int, int)> waypointsBehind = new();
-            List<(byte, int, int, int)> waypointsAhead = new();
-            List<(byte, int, int, int)> avoids = new();
+            List<(byte, int, int, int)> waypointsBehind = [];
+            List<(byte, int, int, int)> waypointsAhead = [];
+            List<(byte, int, int, int)> avoids = [];
 
             byte waypointBehindCount = bs2.ReadByte();
             for (int i = 0; i < waypointBehindCount; i++) {

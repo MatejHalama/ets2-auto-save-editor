@@ -1,5 +1,6 @@
-﻿using ASE.Utils;
+using ASE.Utils;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -84,7 +85,7 @@ namespace ASE.Utils {
 
                 var quat = Quaternion.FromEulerDegrees(yaw, pitch, roll);
                 var ed = quat.ToEulerDegrees();
-                var quat2 = Quaternion.FromEulerDegrees(ed.Item1, ed.Item2, ed.Item3);
+                var quat2 = Quaternion.FromEulerDegrees(ed.yaw, ed.pitch, ed.roll);
 
                 Console.WriteLine($"Testing Yaw: {yaw}°, Pitch: {pitch}°, Roll: {roll}°");
                 Console.WriteLine($"Quaternion: {quat.ToAxisAngleString()}");
@@ -94,7 +95,7 @@ namespace ASE.Utils {
                 var diff = quat.RotationFrom(quat2).Decomposite().Angle; // This will be positive because of how Decomposite works. It takes inverse of cosine and assumes it's positive.
                 if (diff > 1e-6) {
                     Console.WriteLine($"Test failed. Difference: {diff * 180 / Math.PI} degrees.");
-                    Console.WriteLine($"Euler angles (restored): {ed.Item1}, {ed.Item2}, {ed.Item3}");
+                    Console.WriteLine($"Euler angles (restored): {ed.yaw}, {ed.pitch}, {ed.roll}");
                     Console.WriteLine($"Quaternion (reproduced): {quat2.ToAxisAngleString()}");
 
                     failures++;
@@ -125,7 +126,7 @@ namespace ASE.Utils {
             }
         }
     }
-    public class Quaternion(double w, double x, double y, double z) : ICloneable {
+    public partial class Quaternion(double w, double x, double y, double z) : ICloneable {
         public double w = w, x = x, y = y, z = z;
 
         // Background knowledges
@@ -337,7 +338,7 @@ namespace ASE.Utils {
             // If it's IEEE 754, it's can be either 4 bytes or 8 bytes. Hexadecimal representation starts with & followed by 8 or 16 characters of [0-9A-F].
 
             // First, throw if the string is not in the correct format.
-            var pattern = new Regex(@"^\((?<w>[^;]+); (?<x>[^,]+), (?<y>[^,]+), (?<z>[^,]+)\)$");
+            var pattern = QuaternionPattern();
             var match = pattern.Match(value);
             if (!match.Success) {
                 throw new FormatException("The string is not in the correct format.");
@@ -400,7 +401,7 @@ namespace ASE.Utils {
         }
 
         public static Vector3 operator *(Quaternion rotation, Vector3 point) {
-            Quaternion pointQuat = new Quaternion(0, point.x, point.y, point.z);
+            Quaternion pointQuat = new(0, point.x, point.y, point.z);
             Quaternion rotatedQuat = (rotation * pointQuat) * rotation.Normalize().Conjugate();
             return new Vector3(rotatedQuat.x, rotatedQuat.y, rotatedQuat.z);
         }
@@ -445,9 +446,12 @@ namespace ASE.Utils {
         public object Clone() {
             return new Quaternion(w, x, y, z);
         }
+
+        [GeneratedRegex(@"^\((?<w>[^;]+); (?<x>[^,]+), (?<y>[^,]+), (?<z>[^,]+)\)$")]
+        private static partial Regex QuaternionPattern();
     }
 
-    public class Vector3(double x, double y, double z) : ICloneable {
+    public partial class Vector3(double x, double y, double z) : ICloneable {
         public double x = x, y = y, z = z;
 
         public static readonly Vector3 UnitX = new(1, 0, 0);
@@ -459,7 +463,7 @@ namespace ASE.Utils {
         public static readonly Vector3 UnitSCSRoll = UnitZ;
 
         public static Vector3 Parse(string value) {
-            var pattern = new Regex(@"^\(([^,]+), ([^,]+), ([^,]+)\)$");
+            var pattern = Vector3Pattern();
             var match = pattern.Match(value);
             if (!match.Success) {
                 throw new FormatException("The string is not in the correct format.");
@@ -557,6 +561,9 @@ namespace ASE.Utils {
         public object Clone() {
             return new Vector3(x, y, z);
         }
+
+        [GeneratedRegex(@"^\(([^,]+), ([^,]+), ([^,]+)\)$")]
+        private static partial Regex Vector3Pattern();
     }
 
     public class SCSPlacement(Vector3 position, Quaternion orientation) : ICloneable {
@@ -608,28 +615,25 @@ namespace ASE.Utils {
         AutoDouble
     }
 
-    public class SCSDecimalParser {
-        private static readonly Regex pattern1 = new(@"^[.\-0-9]+$");
-        private static readonly Regex pattern2 = new(@"^&[0-9A-Fa-f]{8}$");
-        private static readonly Regex pattern3 = new(@"^&[0-9A-Fa-f]{16}$");
+    public partial class SCSDecimalParser {
+        [GeneratedRegex(@"^[.\-0-9]+$")]
+        private static partial Regex pattern1();
+        [GeneratedRegex(@"^&[0-9A-Fa-f]{8}$")]
+        private static partial Regex pattern2();
+        [GeneratedRegex(@"^&[0-9A-Fa-f]{16}$")]
+        private static partial Regex pattern3();
         public static double ParseDecimal(string value) {
             ArgumentNullException.ThrowIfNull(value);
 
             // note that hex notations are always in big-endian.
-            if (pattern1.IsMatch(value)) {
+            if (pattern1().IsMatch(value)) {
                 return double.Parse(value); // will throw if the string is not in the correct format.
-            } else if (pattern2.IsMatch(value)) {
-                byte[] bytes = new byte[4];
-                for (int i = 0; i < 4; i++) {
-                    bytes[i] = byte.Parse(value.Substring(i * 2 + 1, 2), System.Globalization.NumberStyles.HexNumber);
-                }
-                return ByteEncoder.DecodeFloat(bytes, ByteOrder.BigEndian);
-            } else if (pattern3.IsMatch(value)) {
-                byte[] bytes = new byte[8];
-                for (int i = 0; i < 8; i++) {
-                    bytes[i] = byte.Parse(value.Substring(i * 2 + 1, 2), System.Globalization.NumberStyles.HexNumber);
-                }
-                return ByteEncoder.DecodeDouble(bytes, ByteOrder.BigEndian);
+            } else if (pattern2().IsMatch(value)) {
+                byte[] bytes = Convert.FromHexString(value.AsSpan(1));
+                return BinaryPrimitives.ReadSingleBigEndian(bytes);
+            } else if (pattern3().IsMatch(value)) {
+                byte[] bytes = Convert.FromHexString(value.AsSpan(1));
+                return BinaryPrimitives.ReadDoubleBigEndian(bytes);
             } else {
                 throw new FormatException("The string is not in the correct format.");
             }
@@ -674,11 +678,13 @@ namespace ASE.Utils {
                 case DecimalEncodingType.DecimalDouble:
                     return value.ToString();
                 case DecimalEncodingType.IEEE754Single:
-                    byte[] bytes = ByteEncoder.EncodeFloat((float)value, ByteOrder.BigEndian);
-                    return "&" + string.Join("", bytes.Select(b => b.ToString("x2")));
+                    Span<byte> buf1 = stackalloc byte[4];
+                    BinaryPrimitives.WriteSingleBigEndian(buf1, (float)value);
+                    return "&" + Convert.ToHexString(buf1).ToLowerInvariant();
                 case DecimalEncodingType.IEEE754Double:
-                    bytes = ByteEncoder.EncodeDouble(value, ByteOrder.BigEndian);
-                    return "&" + string.Join("", bytes.Select(b => b.ToString("x2")));
+                    Span<byte> buf2 = stackalloc byte[8];
+                    BinaryPrimitives.WriteDoubleBigEndian(buf2, value);
+                    return "&" + Convert.ToHexString(buf2).ToLowerInvariant();
                 default:
                     throw new ArgumentException("Invalid encoding type.");
             }

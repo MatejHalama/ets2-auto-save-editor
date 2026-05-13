@@ -24,6 +24,7 @@
     <IsPublishable>True</IsPublishable>
     <ApplicationIcon>Icon.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>full</DebugType>

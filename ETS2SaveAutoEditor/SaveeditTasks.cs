@@ -19,9 +19,10 @@ using System.Globalization;
 using System.Management;
 using Windows.Media.Capture.Core;
 using ASE.Properties;
+using System.Buffers.Binary;
 
 namespace ASE {
-    public class SaveeditTasks {
+    public partial class SaveeditTasks {
         public void SetSaveFile(ProfileSave file) {
             saveFile = file;
             saveGame = new(SIIParser2.Parse(saveFile.content));
@@ -207,7 +208,7 @@ namespace ASE {
                     var truck = saveGame[assignedTruckId];
                     var accessories = truck.GetAllPointers("accessories");
                     foreach (var accessory in accessories) {
-                        if (Regex.IsMatch(accessory.GetValue("data_path"), @"""\/def\/vehicle\/truck\/[^/]+?\/engine\/")) {
+                        if (EnginePathPattern().IsMatch(accessory.GetValue("data_path"))) {
                             accessory.Set("data_path", $"\"{enginePath}\"");
                         }
                     }
@@ -263,14 +264,21 @@ namespace ASE {
                     description = Texts.TaskDefs_RefuelReal_2
                 };
         }
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        // https://learn.microsoft.com/en-us/dotnet/standard/native-interop/type-marshalling
 
         [SupportedOSPlatform("Windows")]
-        public SaveEditTask RefuelNow() {
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool SetForegroundWindow(IntPtr hWnd);
+
+        [SupportedOSPlatform("Windows")]
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [SupportedOSPlatform("Windows")]
+        public static SaveEditTask RefuelNow() {
             var run = new Action(() => {
                 try {
                     var proc = Process.GetProcessesByName("eurotrucks2").FirstOrDefault();
@@ -302,20 +310,20 @@ namespace ASE {
 
                     // The address of version string is stored at address 'eurotrucks2.exe+2A04D58'.
                     // We need to read the version string stored in utf8.
-                    var versionAddress = baseAddress + 0x2A04D58;
-                    var versionStringAddress = reader.ReadPointer(versionAddress);
-                    var versionBytes = reader.Read(versionStringAddress, 0x20);
-                    // The string ends at first 0x00 byte.
-                    var versionString = Encoding.UTF8.GetString(versionBytes).Split('\0')[0];
-                    var versionTarget = "1.58.1.4s";
-                    if (versionString != versionTarget) {
-                        // Ask yes or no to continue because of version mismatch. Warn that the offsets may be wrong and can cause unintended consequences.
-                        var mbres = MessageBox.Show($"The game version detected is {versionString}, which is different from the version that this tool is tested on ({versionTarget}). The offsets used in this tool may not work correctly, and can cause unintended consequences such as crashing or corrupting your save. Do you want to continue?", "Version Mismatch", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                        if (mbres == MessageBoxResult.No) return;
-                    }
+                    //var versionAddress = baseAddress + 0x2A04D58;
+                    //var versionStringAddress = reader.ReadPointer(versionAddress);
+                    //var versionBytes = reader.Read(versionStringAddress, 0x20);
+                    //// The string ends at first 0x00 byte.
+                    //var versionString = Encoding.UTF8.GetString(versionBytes).Split('\0')[0];
+                    //var versionTarget = "1.58.1.4s";
+                    //if (versionString != versionTarget) {
+                    //    // Ask yes or no to continue because of version mismatch. Warn that the offsets may be wrong and can cause unintended consequences.
+                    //    var mbres = MessageBox.Show($"The game version detected is {versionString}, which is different from the version that this tool is tested on ({versionTarget}). The offsets used in this tool may not work correctly, and can cause unintended consequences such as crashing or corrupting your save. Do you want to continue?", "Version Mismatch", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    //    if (mbres == MessageBoxResult.No) return;
+                    //}
 
-                    var staticAddress = baseAddress + 0x336B1A8;
-                    int[] pathToStruct = [0x1b8, 0x00, 0x1d8, 0x08, 0x1a8];
+                    var staticAddress = baseAddress + 0x33A4100;
+                    int[] pathToStruct = [0x0, 0xA0, 0x0, 0x98, 0xF0, 0x0, 0x1a8];
 
                     var current = BitConverter.ToSingle(reader.ReadPath(staticAddress, [.. pathToStruct, 0x178], 4));
                     if (!(current >= 0 && current <= 1)) { // Out of range hap
@@ -635,7 +643,7 @@ namespace ASE {
                 description = Texts.TaskDefs_ImportPosition_2
             };
         }
-        public SaveEditTask ReducePosition() {
+        public static SaveEditTask ReducePosition() {
             var run = new Action(() => {
                 try {
                     var positionData = PositionCodeEncoder.DecodePositionCode(Clipboard.GetText().Trim());
@@ -666,7 +674,7 @@ namespace ASE {
             };
         }
 
-        public SaveEditTask DecodePosition() {
+        public static SaveEditTask DecodePosition() {
             var run = new Action(() => {
                 try {
                     var code = Clipboard.GetText().Trim();
@@ -804,7 +812,7 @@ namespace ASE {
                     if (targetMode == 1) {
                         var scsPlacement = SCSPlacement.Parse(targetPlacement);
                         //scsPlacement.Orientation = scsPlacement.Orientation.GetYawAxis().AsAxisAngleDegrees(180) * scsPlacement.Orientation;
-                        scsPlacement.Orientation = scsPlacement.Orientation * Vector3.UnitY.AsAxisAngleDegrees(180);
+                        scsPlacement.Orientation *= Vector3.UnitY.AsAxisAngleDegrees(180);
                     }
 
                     player.Set("truck_placement", targetPlacement);
@@ -1098,10 +1106,11 @@ END
 ** DLL Injection **
 This actually has nothing to do with event CC tools. If you run this, ASE will inject 'injectionTarget.dll' in the directory of ASE.exe to running process of ATS/ETS2 (selected on left top). Don't use this if you don't know what you're doing.";
                 document = document.Replace("{apply_cc_data}", Texts.Task_SpecialCCTask_HowToApply, StringComparison.Ordinal);
+                Span<byte> lenBuf = stackalloc byte[4];
                 while (true) {
                     var res = ListInputBox.Show(Texts.Task_SpecialCCTask_List_Title, document, [Texts.Task_SpecialCCTask_List_01Application, Texts.Task_SpecialCCTask_List_02Apply, Texts.Task_SpecialCCTask_List_03Delete, Texts.Task_SpecialCCTask_List_04Generation, Texts.Task_SpecialCCTask_List_05ExportVehicle, Texts.Task_SpecialCCTask_List_06Compile, Texts.Task_SpecialCCTask_List_07DLLInjection]);
                     if (res == -1) return;
-                    if (res == 6) { // Hidden testing
+                    if (res == 6 && OperatingSystem.IsWindows()) { // DLL Injection
                         if (!File.Exists("injectionTarget.dll")) {
                             MessageBox.Show("You can't use this.");
                             return;
@@ -1138,14 +1147,16 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                             // Encode truck
                             var vehicleStr = UnitSerializer.SerializeUnit(assignedTruck, CommonEdits.KNOWN_PTR_ITEMS_TRUCK);
                             byte[] buf = Encoding.UTF8.GetBytes(vehicleStr);
-                            memory.Write(ByteEncoder.EncodeUInt32((uint)buf.Length, ByteOrder.BigEndian));
+                            BinaryPrimitives.WriteInt32BigEndian(lenBuf, buf.Length);
+                            memory.Write(lenBuf);
                             memory.Write(buf);
 
                             // Encode trailer
                             if (assignedTrailer is not null) {
                                 var trailerStr = UnitSerializer.SerializeUnit(assignedTrailer, CommonEdits.KNOWN_PTR_ITEMS_TRAILER);
                                 buf = Encoding.UTF8.GetBytes(trailerStr);
-                                memory.Write(ByteEncoder.EncodeUInt32((uint)buf.Length, ByteOrder.BigEndian));
+                                BinaryPrimitives.WriteInt32BigEndian(lenBuf, buf.Length);
+                                memory.Write(lenBuf);
                                 memory.Write(buf);
                             }
 
@@ -1221,7 +1232,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                             for (int i = 0; i < (hasTrailer ? 2 : 1); i++) {
                                 buf = new byte[4];
                                 r2.Read(buf, 0, 4);
-                                int len = (int)ByteEncoder.DecodeUInt32(buf, ByteOrder.BigEndian);
+                                int len = BinaryPrimitives.ReadInt32BigEndian(buf);
 
                                 buf = new byte[len];
                                 r2.Read(buf, 0, len);
@@ -1392,15 +1403,16 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                                     if (lines[i] == "POSITIONS") {
                                         break;
                                     }
-                                    var m = Regex.IsMatch(lines[i], @"^ASE_VEHICLE");
-                                    if (!m) {
+                                    //var m = Regex.IsMatch(lines[i], @"^ASE_VEHICLE");
+                                    //if (!m) {
+                                    if (!lines[i].StartsWith("ASE_VEHICLE", StringComparison.InvariantCulture)) {
                                         WrongFormat("Can't find ASE_VEHICLE in the expected position");
                                         return;
                                     }
 
                                     i++;
 
-                                    if (!Regex.IsMatch(lines[i], @"^[0-9A-F]{7,}$")) {
+                                    if (!VehicleDataIDPattern().IsMatch(lines[i])) {
                                         WrongFormat("Can't find vehicle data");
                                         return;
                                     }
@@ -1431,11 +1443,11 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
 
                                     var name = lines[i++];
                                     var vehicleNumber = lines[i++];
-                                    if (!Regex.IsMatch(vehicleNumber, @"^\d+$")) {
+                                    //if (!Regex.IsMatch(vehicleNumber, @"^\d+$")) {
+                                    if (!int.TryParse(vehicleNumber, out int vehicleIndex) || vehicleIndex < 0) {
                                         WrongFormat("not a vehicle number");
                                         return;
                                     }
-                                    int vehicleIndex = int.Parse(vehicleNumber);
                                     if (vehicleIndex >= vehicles.Count) {
                                         WrongFormat($"vehicle number out of range (0 - {vehicles.Count - 1})");
                                         return;
@@ -1687,8 +1699,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                 }
                 int vehicleCount = 0;
                 bool isTrailerDetached = false; // If the trailer's detached, also allow the first trailer to be translated not only truck. If false, all translation commands are allowed only if target is 1, and if true, all translation commands are allowed if target is 1 or 2.
-                Entity2? vehicleObj = null;
-                if (player.TryGetPointer("assigned_truck", out vehicleObj)) {
+                if (player.TryGetPointer("assigned_truck", out Entity2? vehicleObj)) {
                     vehicleCount++;
                 }
                 if (player.TryGetPointer("assigned_trailer", out vehicleObj)) {
@@ -1724,7 +1735,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                 // A line separates the commands. Each line must be one of (1) empty (2) start with # for comment (3) start with the command. Otherwise an error will be thrown.
 
                 // Step 1. Validation
-                List<(int lineNumber, string command, object[] param)> validCommandLines = new();
+                List<(int lineNumber, string command, object[] param)> validCommandLines = [];
 
                 var rawScript = Clipboard.GetText();
                 if (rawScript.Length == 0) {
@@ -1997,7 +2008,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                         var eulerAngleQuaternion = Quaternion.FromEulerDegrees((float)param[0], (float)param[1], (float)param[2]);
                         log.AppendLine($"Input rotation: {eulerAngleQuaternion.ToEulerDegrees()}");
                         log.AppendLine($"Initial Orientation: {vehiclePlacements[currentTarget - 1].Orientation.ToEulerDegrees()}");
-                        targetPlacement.Orientation = targetPlacement.Orientation * eulerAngleQuaternion; // Intrinsic rotation
+                        targetPlacement.Orientation *= eulerAngleQuaternion; // Intrinsic rotation
                         log.AppendLine($"Final Orientation: {vehiclePlacements[currentTarget - 1].Orientation.ToEulerDegrees()}");
                     }
                     if (command == "copy_from") {
@@ -2058,5 +2069,10 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                 description = Texts.TaskDefs_ExecuteVPS_2
             };
         }
+
+        [GeneratedRegex(@"""\/def\/vehicle\/truck\/[^/]+?\/engine\/")]
+        private static partial Regex EnginePathPattern();
+        [GeneratedRegex(@"^[0-9A-F]{7,}$")]
+        private static partial Regex VehicleDataIDPattern();
     }
 }

@@ -1,5 +1,6 @@
 using ASE.Utils;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -152,9 +153,9 @@ namespace ASE.SII2Parser {
             return decoder.GetParsed();
         }
 
-        private byte[] data;
+        private readonly byte[] data;
         private int offset = 0;
-        private Dictionary<int, BSIIStruct> structures = [];
+        private readonly Dictionary<int, BSIIStruct> structures = [];
 
         private SII2BSIIDecoder(byte[] siiData) {
             // Header is already checked
@@ -181,12 +182,12 @@ namespace ASE.SII2Parser {
         }
 
         private string ReadString() {
-            int length = ByteEncoder.DecodeInt32(NextBuffer(4));
+            int length = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
             string result = Encoding.UTF8.GetString(NextBuffer(length));
             return result;
         }
 
-        private string GetEncodedString(ulong value) {
+        private static string GetEncodedString(ulong value) {
             string s = "";
             while (value % (ulong)(TOKEN_CHARS.Length + 1) > 0) {
                 int ci = (int)(value % (ulong)(TOKEN_CHARS.Length + 1)) - 1;
@@ -202,7 +203,7 @@ namespace ASE.SII2Parser {
             string s = "";
             if (parts == 0) return "null";
             if (parts == 0xFF) { // Special hex token
-                ulong value = ByteEncoder.DecodeUInt64(NextBuffer(8));
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8));
                 do {
                     bool isLast = (value & ~(ulong)0xFFFF) == 0;
                     int part = (int)(value & 0xFFFF);
@@ -221,7 +222,7 @@ namespace ASE.SII2Parser {
 
             // Encoded strings separated by dots
             for (int i = 0; i < parts; i++) {
-                ulong value = ByteEncoder.DecodeUInt64(NextBuffer(8));
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8));
                 s += GetEncodedString(value);
                 if (i < parts - 1) {
                     s += ".";
@@ -231,30 +232,30 @@ namespace ASE.SII2Parser {
         }
 
         private string ReadFloat2() {
-            float f1 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f2 = ByteEncoder.DecodeFloat(NextBuffer(4));
+            float f1 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f2 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
             return $"({EncodeFloat(f1)}, {EncodeFloat(f2)})";
         }
 
         private string ReadFloat3() {
-            float f1 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f2 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f3 = ByteEncoder.DecodeFloat(NextBuffer(4));
+            float f1 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f2 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f3 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
             return $"({EncodeFloat(f1)}, {EncodeFloat(f2)}, {EncodeFloat(f3)})";
         }
 
         private string ReadFloat4() {
-            float f1 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f2 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f3 = ByteEncoder.DecodeFloat(NextBuffer(4));
-            float f4 = ByteEncoder.DecodeFloat(NextBuffer(4));
+            float f1 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f2 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f3 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
+            float f4 = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
             return $"({EncodeFloat(f1)}; {EncodeFloat(f2)}, {EncodeFloat(f3)}, {EncodeFloat(f4)})";
         }
 
         private string ReadFloat8() {
             float[] fs = new float[8];
             for (int i = 0; i < 8; i++) {
-                fs[i] = ByteEncoder.DecodeFloat(NextBuffer(4));
+                fs[i] = BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4));
             }
             int t = (int)Math.Floor(fs[3]);
             fs[0] += ((t & 0xFFF) - 2048) << 9;
@@ -262,7 +263,7 @@ namespace ASE.SII2Parser {
             return $"({EncodeFloat(fs[0])}, {EncodeFloat(fs[1])}, {EncodeFloat(fs[2])}) ({EncodeFloat(fs[4])}; {EncodeFloat(fs[5])}, {EncodeFloat(fs[6])}, {EncodeFloat(fs[7])})";
         }
 
-        private string JsonEncodeString(string s) {
+        private static string JsonEncodeString(string s) {
             byte[] utf8Bytes = Encoding.UTF8.GetBytes(s);
             StringBuilder stringBuilder = new();
 
@@ -283,7 +284,7 @@ namespace ASE.SII2Parser {
             return "\"" + stringBuilder.ToString() + "\"";
         }
 
-        private string EncodeFloat(float f) {
+        private static string EncodeFloat(float f) {
             return SCSSpecialString.EncodeScsFloatToHex(f);
             //return f.ToString("R"); // Debugging
         }
@@ -295,7 +296,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x02) { // string[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] strings = new string[count];
                 for (int i = 0; i < count; i++) {
                     strings[i] = JsonEncodeString(ReadString());
@@ -304,17 +305,17 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x03) { // token
-                ulong value = ByteEncoder.DecodeUInt64(NextBuffer(8));
+                ulong value = BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8));
                 var s = GetEncodedString(value);
                 if (s == "") s = "\"\""; // Empty string should be '""'
                 unit.Set(field.name, s);
                 return;
             }
             if (type == 0x04) { // token[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] strings = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ulong value = ByteEncoder.DecodeUInt64(NextBuffer(8));
+                    ulong value = BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8));
                     strings[i] = GetEncodedString(value);
                     if (strings[i] == "") strings[i] = "\"\""; // Empty string should be '""'
                 }
@@ -322,14 +323,14 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x05) { // float
-                unit.Set(field.name, EncodeFloat(ByteEncoder.DecodeFloat(NextBuffer(4))));
+                unit.Set(field.name, EncodeFloat(BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4))));
                 return;
             }
             if (type == 0x06) { // float[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] floats = new string[count];
                 for (int i = 0; i < count; i++) {
-                    floats[i] = EncodeFloat(ByteEncoder.DecodeFloat(NextBuffer(4)));
+                    floats[i] = EncodeFloat(BinaryPrimitives.ReadSingleLittleEndian(NextBuffer(4)));
                 }
                 unit.Set(field.name, floats);
                 return;
@@ -339,7 +340,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x08) { // float2[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] floats = new string[count];
                 for (int i = 0; i < count; i++)
                     floats[i] = ReadFloat2();
@@ -352,7 +353,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x0A) { // float3[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] floats = new string[count];
                 for (int i = 0; i < count; i++) {
                     floats[i] = ReadFloat3();
@@ -366,7 +367,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x0C) { // float4[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] floats = new string[count];
                 for (int i = 0; i < count; i++) {
                     floats[i] = ReadFloat4();
@@ -375,87 +376,87 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x0D) { // fixed (int)
-                unit.Set(field.name, ByteEncoder.DecodeInt32(NextBuffer(4)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4)) + "");
                 return;
             }
             if (type == 0x0E) { // fixed[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeInt32(NextBuffer(4)) + "";
+                    ints[i] = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x0F) { // fixed2 (int) (x, y)
-                int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 unit.Set(field.name, $"({i1}, {i2})");
                 return;
             }
             if (type == 0x10) { // fixed2[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     ints[i] = $"({i1}, {i2})";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x11) { // fixed3 (int) (x, y, z)
-                int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i3 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i3 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 unit.Set(field.name, $"({i1}, {i2}, {i3})");
                 return;
             }
             if (type == 0x12) { // fixed3[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i3 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i3 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     ints[i] = $"({i1}, {i2}, {i3})";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x13) { // fixed4 (int) (x, y, z, w)
-                int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i3 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i4 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i3 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i4 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 unit.Set(field.name, $"({i1}; {i2}, {i3}, {i4})");
                 return;
             }
             if (type == 0x14) { // fixed4[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i3 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i4 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i3 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i4 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     ints[i] = $"({i1}; {i2}, {i3}, {i4})";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x15 || type == 0x41) { // int2 (x, y)
-                int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 unit.Set(field.name, $"({i1}, {i2})");
                 return;
             }
             if (type == 0x16 || type == 0x42) { // int2[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    int i1 = ByteEncoder.DecodeInt32(NextBuffer(4));
-                    int i2 = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int i1 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
+                    int i2 = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     ints[i] = $"({i1}, {i2})";
                 }
                 unit.Set(field.name, ints);
@@ -466,7 +467,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x18) { // quaternion[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] s = new string[count];
                 for (int i = 0; i < count; i++) {
                     s[i] = ReadFloat4();
@@ -479,7 +480,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x1A) { // placement[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] s = new string[count];
                 for (int i = 0; i < count; i++) {
                     s[i] = ReadFloat8();
@@ -488,79 +489,79 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x25) { // s32 (int)
-                unit.Set(field.name, ByteEncoder.DecodeInt32(NextBuffer(4)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4)) + "");
                 return;
             }
             if (type == 0x26) { // s32[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeInt32(NextBuffer(4)) + "";
+                    ints[i] = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x27 || type == 0x2F) { // u32 (uint). 0x2f is unclear. (only used for cash in game)
-                unit.Set(field.name, ByteEncoder.DecodeUInt32(NextBuffer(4)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4)) + "");
                 return;
             }
             if (type == 0x28) { // u32[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeUInt32(NextBuffer(4)) + "";
+                    ints[i] = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x29) { // s16 (short)
-                unit.Set(field.name, ByteEncoder.DecodeInt16(NextBuffer(2)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadInt16LittleEndian(NextBuffer(2)) + "");
                 return;
             }
             if (type == 0x2A) { // s16[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeInt16(NextBuffer(2)) + "";
+                    ints[i] = BinaryPrimitives.ReadInt16LittleEndian(NextBuffer(2)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x2B) { // u16 (ushort)
-                unit.Set(field.name, ByteEncoder.DecodeUInt16(NextBuffer(2)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadUInt16LittleEndian(NextBuffer(2)) + "");
                 return;
             }
             if (type == 0x2C) { // u16[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeUInt16(NextBuffer(2)) + "";
+                    ints[i] = BinaryPrimitives.ReadUInt16LittleEndian(NextBuffer(2)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x31) { // s64 (long)
-                unit.Set(field.name, ByteEncoder.DecodeInt64(NextBuffer(8)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadInt64LittleEndian(NextBuffer(8)) + "");
                 return;
             }
             if (type == 0x32) { // s64[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeInt64(NextBuffer(8)) + "";
+                    ints[i] = BinaryPrimitives.ReadInt64LittleEndian(NextBuffer(8)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
             }
             if (type == 0x33) { // u64 (ulong)
-                unit.Set(field.name, ByteEncoder.DecodeUInt64(NextBuffer(8)) + "");
+                unit.Set(field.name, BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8)) + "");
                 return;
             }
             if (type == 0x34) { // u64[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] ints = new string[count];
                 for (int i = 0; i < count; i++) {
-                    ints[i] = ByteEncoder.DecodeUInt64(NextBuffer(8)) + "";
+                    ints[i] = BinaryPrimitives.ReadUInt64LittleEndian(NextBuffer(8)) + "";
                 }
                 unit.Set(field.name, ints);
                 return;
@@ -570,7 +571,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x36) { // bool[]
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] bools = new string[count];
                 for (int i = 0; i < count; i++) {
                     bools[i] = NextBuffer() > 0 ? "true" : "false";
@@ -580,16 +581,16 @@ namespace ASE.SII2Parser {
             }
             if (type == 0x37) { // enum
                 Dictionary<int, string> enumValues = (Dictionary<int, string>)field.data!;
-                int enumValue = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int enumValue = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 unit.Set(field.name, enumValues[enumValue]);
                 return;
             }
             if (type == 0x38) { // enum[]
                 Dictionary<int, string> enumValues = (Dictionary<int, string>)field.data!;
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] enums = new string[count];
                 for (int i = 0; i < count; i++) {
-                    int enumValue = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int enumValue = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     enums[i] = enumValues[enumValue];
                 }
                 unit.Set(field.name, enums);
@@ -600,7 +601,7 @@ namespace ASE.SII2Parser {
                 return;
             }
             if (type == 0x3A || type == 0x3C || type == 0x3E) { // Array of pointers.
-                uint count = ByteEncoder.DecodeUInt32(NextBuffer(4));
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(NextBuffer(4));
                 string[] arr = new string[count];
                 for (int i = 0; i < count; i++) {
                     arr[i] = ReadToken();
@@ -630,7 +631,7 @@ namespace ASE.SII2Parser {
                 throw new ArgumentException("Data is not BSII");
             }
 
-            int version = ByteEncoder.DecodeInt32(NextBuffer(4));
+            int version = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
             if (version != 3) {
                 throw new ArgumentException($"Unsupported BSII version. Expected 3, got {version}");
             }
@@ -639,7 +640,7 @@ namespace ASE.SII2Parser {
             Game2 game = new(sii);
 
             while (true) { // Read blocks
-                int blockType = ByteEncoder.DecodeInt32(NextBuffer(4));
+                int blockType = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                 byte validity = NextBuffer();
 
                 if (blockType == 0 && validity == 0) {
@@ -648,7 +649,7 @@ namespace ASE.SII2Parser {
                 }
 
                 if (blockType == 0) { // Definition of a structure
-                    int structId = ByteEncoder.DecodeInt32(NextBuffer(4));
+                    int structId = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                     string structName = ReadString();
 
                     BSIIStruct st = new() {
@@ -656,7 +657,7 @@ namespace ASE.SII2Parser {
                     };
 
                     while (true) { // Read fields
-                        int fieldType = ByteEncoder.DecodeInt32(NextBuffer(4));
+                        int fieldType = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                         if (fieldType == 0) { // End of structure definition
                             break;
                         }
@@ -671,9 +672,9 @@ namespace ASE.SII2Parser {
                         if (fieldType == 0x37 || fieldType == 0x38) { // Special type (enum)
                             Dictionary<int, string> enumValues = [];
 
-                            int enumItems = ByteEncoder.DecodeInt32(NextBuffer(4));
+                            int enumItems = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                             for (int i = 0; i < enumItems; i++) {
-                                int enumValue = ByteEncoder.DecodeInt32(NextBuffer(4));
+                                int enumValue = BinaryPrimitives.ReadInt32LittleEndian(NextBuffer(4));
                                 string enumKeyword = ReadString(); // Enum name
 
                                 enumValues[enumValue] = enumKeyword;

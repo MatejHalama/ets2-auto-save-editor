@@ -59,7 +59,7 @@ namespace ASE {
         public string name;
         public string description;
         public Action run;
-        public override string ToString() => name;
+        public override readonly string ToString() => name;
     }
     /// <summary>
     /// MainWindow.xaml에 대한 상호 작용 논리
@@ -67,7 +67,7 @@ namespace ASE {
     public partial class MainWindow : Window {
         public static readonly string Version = "1.34.6";
 
-        private SaveeditTasks tasks = new();
+        private readonly SaveeditTasks tasks = new();
 
         private void LoadTasks() {
             TaskList.Items.Clear();
@@ -83,14 +83,14 @@ namespace ASE {
             addAction(tasks.Refuel(false));
             addAction(tasks.Refuel(true));
             if (OperatingSystem.IsWindows()/* && File.Exists("ASE_ACTIVATE_TRAINER")*/)
-                addAction(tasks.RefuelNow());
+                addAction(SaveeditTasks.RefuelNow());
             addAction(tasks.FixEverything());
             addAction(tasks.ShareNavigation());
             addAction(tasks.ImportNavigation());
             addAction(tasks.SharePosition());
             addAction(tasks.ImportPosition());
-            addAction(tasks.ReducePosition());
-            addAction(tasks.DecodePosition());
+            addAction(SaveeditTasks.ReducePosition());
+            addAction(SaveeditTasks.DecodePosition());
             addAction(tasks.ConnectTrailerInstantly());
             addAction(tasks.TeleportToCargo());
             addAction(tasks.VehicleSharingTool(currentGame));
@@ -128,7 +128,7 @@ namespace ASE {
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         }
 
-        private Trucksim GetNextAvailableGame(Trucksim currentGame) {
+        private static Trucksim GetNextAvailableGame(Trucksim currentGame) {
             // Get the values of the Trucksim enum
             Trucksim[] games = (Trucksim[])Enum.GetValues(typeof(Trucksim));
 
@@ -155,12 +155,12 @@ namespace ASE {
             return currentGame;
         }
 
-        private bool IsGameAvailable(Trucksim game) {
+        private static bool IsGameAvailable(Trucksim game) {
             var path = GetGamePath(game);
             return Directory.Exists(path);
         }
 
-        private string GetGamePath(Trucksim game) {
+        private static string GetGamePath(Trucksim game) {
             var path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
             path = game switch {
@@ -221,7 +221,7 @@ namespace ASE {
 
         private void LoadSaveFile(string path) {
             var save = (ProfileSave)SaveList.SelectedItem;
-            var onEnd = new Action<byte[]?>((byte[]? data) => {
+            var onEnd = new Action<byte[]?>(data => {
                 if (data is null) {
                     EnableAll();
                     return;
@@ -312,7 +312,7 @@ namespace ASE {
                     };
                     saves.Add(psave);
                 }
-                saves.Sort(new Comparison<ProfileSave>((ProfileSave a, ProfileSave b) => {
+                saves.Sort(new Comparison<ProfileSave>((a, b) => {
                     if (a.time > b.time) return -1;
                     if (a.time < b.time) return 1;
                     return 0;
@@ -406,7 +406,7 @@ namespace ASE {
                     AccelerationRatio = 0.5,
                     DecelerationRatio = 0.5
                 };
-                anim.Completed += (object? s, EventArgs a) => displayAnim();
+                anim.Completed += (_s, _a) => displayAnim();
                 if (TaskDescription.Text == "") {
                     displayAnim();
                 } else {
@@ -441,7 +441,7 @@ namespace ASE {
                 var anim = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromSeconds(0.1))) {
                     AccelerationRatio = 1
                 };
-                anim.Completed += (object? sender, EventArgs e) => {
+                anim.Completed += (_s, _a) => {
                     ProfileList.Visibility = Visibility.Hidden;
                 };
                 ProfileList.BeginAnimation(OpacityProperty, anim);
@@ -458,7 +458,7 @@ namespace ASE {
                 var anim = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromSeconds(0.1))) {
                     AccelerationRatio = 1
                 };
-                anim.Completed += (object? sender, EventArgs e) => {
+                anim.Completed += (_s, _a) => {
                     SaveListPanel.Visibility = Visibility.Hidden;
                     SaveInfo.Visibility = Visibility.Collapsed;
                 };
@@ -477,7 +477,7 @@ namespace ASE {
                 var anim = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromSeconds(0.1))) {
                     AccelerationRatio = 1
                 };
-                anim.Completed += (object? sender, EventArgs e) => {
+                anim.Completed += (_s, _a) => {
                     TaskListPanel.Visibility = Visibility.Hidden;
                     ExecuteButton.Visibility = Visibility.Hidden;
                 };
@@ -561,7 +561,7 @@ namespace ASE {
             HandleException(e.ExceptionObject as Exception);
         }
 
-        private void HandleException(Exception? ex) {
+        private static void HandleException(Exception? ex) {
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             string logFileName = $"Details.{timestamp}.txt";
 
