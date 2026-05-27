@@ -185,13 +185,13 @@ namespace ASE {
                         return;
                     }
 
-                    var engineNames = new string[] { "Volvo FH6 780 hp", "Volvo old 750 hp", "Scania Electric 450 kW", "Renault Electric 490 kW", "Scania new 730 hp", "Scania old 730 hp", "Iveco 310" };
+                    var engineNames = new string[] { "Volvo FH6 780 hp", "Volvo old 750 hp", "Scania Electric 450 kW", "Renault Electric 490 kW", "Scania 770 hp", "Scania 730 hp (old)", "Iveco 310" };
                     var enginePaths = new string[] {
                         "/def/vehicle/truck/volvo.fh_2024/engine/d17a780.sii",
                         "/def/vehicle/truck/volvo.fh16/engine/d16g750.sii",
                         "/def/vehicle/truck/scania.s_2024e/engine/450kw.sii",
                         "/def/vehicle/truck/renault.etech_t/engine/490kw.sii",
-                        "/def/vehicle/truck/scania.s_2016/engine/dc16_730.sii",
+                        "/def/vehicle/truck/scania.s_2016/engine/dc16_770.sii",
                         "/def/vehicle/truck/scania.streamline/engine/dc16_730_2.sii",
                         "/def/vehicle/truck/iveco.stralis/engine/cursor8_310hp.sii"
                     };
