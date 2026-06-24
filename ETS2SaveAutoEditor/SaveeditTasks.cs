@@ -1370,12 +1370,6 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                                     vehicle.Set("stored_trailer_placements", decoded);
                                 }
 
-                                /*if (decoded.Length > 2) {
-                                    player.Set("slave_trailer_placements", [.. decoded.Skip(2)]);
-                                } else {
-                                    player.Set("slave_trailer_placements", "0");
-                                }*/
-
                                 vehicle.Set("stored_trailer_attached", positionData.TrailerConnected ? "true" : "false");
                             }
 
@@ -1744,19 +1738,23 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                     MessageBox.Show("Unable to find player.", Texts.Common_Message_Error_Title);
                     return;
                 }
+                Entity2 vehicle;
+                if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                    MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                    return;
+                }
                 int vehicleCount = 0;
                 bool isTrailerDetached = false; // If the trailer's detached, also allow the first trailer to be translated not only truck. If false, all translation commands are allowed only if target is 1, and if true, all translation commands are allowed if target is 1 or 2.
-                if (player.TryGetPointer("assigned_truck", out Entity2? vehicleObj)) {
+                if (vehicle.TryGetPointer("vehicle", out Entity2? vehicleObj)) {
                     vehicleCount++;
                 }
-                if (player.TryGetPointer("assigned_trailer", out vehicleObj)) {
-                    vehicleCount++;
-                    while (vehicleObj.TryGetPointer("slave_trailer", out vehicleObj)) {
-                        vehicleCount++;
+                if (vehicle.TryGetPointer("trailer", out vehicleObj)) {
+                    if (vehicle.TryGetArray("stored_trailer_placements", out List<String>? trailers)) {
+                        vehicleCount += trailers.Count;
                     }
                 }
 
-                if (player.GetValue("assigned_trailer_connected") == "false") {
+                if (vehicle.GetValue("stored_trailer_attached") == "false") {
                     isTrailerDetached = true;
                 }
 
@@ -1764,11 +1762,9 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
 
                 List<SCSPlacement> vehiclePlacements = [];
                 if (vehicleCount >= 1)
-                    vehiclePlacements.Add(SCSPlacement.Parse(player.GetValue("truck_placement")));
-                if (vehicleCount >= 2)
-                    vehiclePlacements.Add(SCSPlacement.Parse(player.GetValue("trailer_placement")));
-                if (vehicleCount >= 3 && player.TryGetArray("slave_trailer_placements", out var slaveTrailerPlacements)) {
-                    foreach (var placement in slaveTrailerPlacements) {
+                    vehiclePlacements.Add(SCSPlacement.Parse(vehicle.GetValue("stored_vehicle_placement")));
+                if (vehicleCount >= 2 && vehicle.TryGetArray("stored_trailer_placements", out var trailerPlacements)) {
+                    foreach (var placement in trailerPlacements) {
                         vehiclePlacements.Add(SCSPlacement.Parse(placement));
                     }
                 }
@@ -2070,11 +2066,11 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                         log.AppendLine($"Straightened {count} vehicle(s) behind vehicle {currentTarget}");
                     }
                     if (command == "attach") {
-                        player.Set("assigned_trailer_connected", "true");
+                        vehicle.Set("stored_trailer_attached", "true");
                         isTrailerDetached = false;
                     }
                     if (command == "detach") {
-                        player.Set("assigned_trailer_connected", "false");
+                        vehicle.Set("stored_trailer_attached", "false");
                         isTrailerDetached = true;
                     }
                     if (command == "equalize") {
@@ -2087,22 +2083,18 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                 }
                 // Apply the changes to the save
                 if (vehicleCount >= 1)
-                    player.Set("truck_placement", vehiclePlacements[0].ToString());
+                    vehicle.Set("stored_vehicle_placement", vehiclePlacements[0].ToString());
                 else
-                    player.Set("truck_placement", "(0, 0, 0) (1; 0, 0, 0)");
-                if (vehicleCount >= 2)
-                    player.Set("trailer_placement", vehiclePlacements[1].ToString());
-                else
-                    player.Set("trailer_placement", "(0, 0, 0) (1; 0, 0, 0)");
-                if (vehicleCount < 3) {
-                    player.Set("slave_trailer_placements", "0");
-                } else {
-                    slaveTrailerPlacements = [];
-                    for (int i = 2; i < vehicleCount; i++) {
-                        slaveTrailerPlacements.Add(vehiclePlacements[i].ToString());
+                    vehicle.Set("stored_vehicle_placement", "(0, 0, 0) (1; 0, 0, 0)");
+                if (vehicleCount >= 2) {
+                    trailerPlacements = [];
+                    for (int i = 1; i < vehicleCount; i++) {
+                        trailerPlacements.Add(vehiclePlacements[i].ToString());
                     }
-                    player.Set("slave_trailer_placements", slaveTrailerPlacements);
+                    vehicle.Set("stored_trailer_placements", trailerPlacements);
                 }
+                else
+                    player.Set("stored_trailer_placements", ["(0, 0, 0) (1; 0, 0, 0)"]);
 
                 saveFile.Save(saveGame);
 
