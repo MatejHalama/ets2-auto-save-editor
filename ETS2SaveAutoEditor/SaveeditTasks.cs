@@ -178,7 +178,14 @@ namespace ASE {
             var run = new Action(() => {
                 try {
                     var player = saveGame.EntityType("player")!;
-                    var assignedTruckId = player.GetValue("assigned_truck");
+
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
+                    var assignedTruckId = vehicle.GetValue("vehicle");
 
                     if (assignedTruckId == "null") {
                         MessageBox.Show(Texts.Common_Message_Error_Message, Texts.Common_Message_Error_Title);
@@ -232,8 +239,14 @@ namespace ASE {
                 try {
                     var player = saveGame.EntityType("player")!;
 
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
                     Entity2 assignedTruck;
-                    if (!player.TryGetPointer("assigned_truck", out assignedTruck!)) {
+                    if (!vehicle.TryGetPointer("vehicle", out assignedTruck!)) {
                         MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
                         return;
                     }
@@ -555,24 +568,24 @@ namespace ASE {
                 try {
                     var player = saveGame.EntityType("player")!;
 
-                    List<float[]> positions = [];
-
-                    string truckPlacement = player.GetValue("truck_placement");
-                    positions.Add(SCSSpecialString.DecodeSCSPosition(truckPlacement));
-
-                    var trailerAssigned = player.GetValue("assigned_trailer") != "null";
-                    if (trailerAssigned) {
-                        string trailerPlacement = player.GetValue("trailer_placement");
-                        positions.Add(SCSSpecialString.DecodeSCSPosition(trailerPlacement));
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
                     }
 
-                    if (player.TryGetArray("slave_trailer_placements", out var slaveTrailers)) {
-                        foreach (var slave in slaveTrailers) {
-                            positions.Add(SCSSpecialString.DecodeSCSPosition(slave));
+                    List<float[]> positions = [];
+
+                    string truckPlacement = vehicle.GetValue("stored_vehicle_placement");
+                    positions.Add(SCSSpecialString.DecodeSCSPosition(truckPlacement));
+
+                    if (vehicle.TryGetArray("stored_trailer_placements", out var trailers)) {
+                        foreach (var trailer in trailers) {
+                            positions.Add(SCSSpecialString.DecodeSCSPosition(trailer));
                         }
                     }
 
-                    var trailerConnected = player.GetValue("assigned_trailer_connected") == "true";
+                    var trailerConnected = vehicle.GetValue("stored_trailer_attached") == "true";
                     if (positions.Count == 1) trailerConnected = true;
 
                     string encodedData = PositionCodeEncoder.EncodePositionCode(new PositionData {
@@ -606,23 +619,24 @@ namespace ASE {
                 try {
                     var player = saveGame.EntityType("player")!;
 
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
                     var positionData = PositionCodeEncoder.DecodePositionCode(Clipboard.GetText().Trim());
                     var decoded = (from a in positionData.Positions select SCSSpecialString.EncodeFloatPositionToHex(a)).ToArray();
                     if (decoded.Length >= 1) {
-                        player.Set("truck_placement", decoded[0]);
+                        vehicle.Set("stored_vehicle_placement", decoded[0]);
                     }
                     if (decoded.Length >= 2) {
-                        player.Set("trailer_placement", decoded[1]);
+                        vehicle.Set("stored_trailer_placements", [.. decoded.Skip(1)]);
                     } else {
-                        player.Set("trailer_placement", decoded[0]);
-                    }
-                    if (decoded.Length > 2) {
-                        player.Set("slave_trailer_placements", [.. decoded.Skip(2)]);
-                    } else {
-                        player.Set("slave_trailer_placements", "0");
+                        vehicle.Set("stored_trailer_placements", decoded);
                     }
 
-                    player.Set("assigned_trailer_connected", positionData.TrailerConnected ? "true" : "false");
+                    vehicle.Set("stored_trailer_attached", positionData.TrailerConnected ? "true" : "false");
 
                     CommonEdits.DestroyNavigationData(saveGame.EntityType("economy")!);
 
@@ -714,10 +728,15 @@ namespace ASE {
                     var economy = saveGame.EntityType("economy")!;
                     var player = saveGame.EntityType("player")!;
 
-                    var truckPlacement = player.GetValue("truck_placement");
-                    player.Set("trailer_placement", truckPlacement);
-                    player.Set("slave_trailer_placements", "0");
-                    player.Set("assigned_trailer_connected", "true");
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
+                    var truckPlacement = vehicle.GetValue("stored_vehicle_placement");
+                    vehicle.Set("stored_trailer_placements", [truckPlacement]);
+                    vehicle.Set("stored_trailer_attached", "true");
 
                     foreach (var item in economy.GetAllPointers("stored_gps_behind_waypoints")) {
                         item.DeleteSelf();
@@ -908,7 +927,13 @@ namespace ASE {
 
                         var player = saveGame.EntityType("player")!;
 
-                        var assignedTruck = player.GetPointer("assigned_truck");
+                        Entity2 vehicle;
+                        if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                            MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                            return;
+                        }
+
+                        var assignedTruck = vehicle.GetPointer("vehicle");
                         if (assignedTruck == null) {
                             MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
                             continue;
@@ -940,7 +965,13 @@ namespace ASE {
                     if (choice == 1) { // Export trailer
                         var player = saveGame.EntityType("player")!;
 
-                        var assignedTrailer = player.GetPointer("assigned_trailer");
+                        Entity2 vehicle;
+                        if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                            MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                            return;
+                        }
+
+                        var assignedTrailer = vehicle.GetPointer("trailer");
                         if (assignedTrailer == null) {
                             MessageBox.Show("You don't have any trailer assigned.", Texts.Common_Message_Error_Title);
                             continue;
@@ -1129,16 +1160,22 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                             var economy = saveGame.EntityType("economy")!;
                             var player = saveGame.EntityType("player")!;
 
+                            Entity2 vehicle;
+                            if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                                MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                                return;
+                            }
+
                             var sb = new StringBuilder();
                             sb.Append("ASE_VEHICLE\n");
 
                             Entity2 assignedTruck;
-                            if (!player.TryGetPointer("assigned_truck", out assignedTruck!)) {
+                            if (!vehicle.TryGetPointer("vehicle", out assignedTruck!)) {
                                 MessageBox.Show("You need to have an assigned truck.");
                                 return;
                             }
 
-                            player.TryGetPointer("assigned_trailer", out Entity2? assignedTrailer);
+                            vehicle.TryGetPointer("trailer", out Entity2? assignedTrailer);
 
                             // Encode the vehicle into binary data
                             MemoryStream memory = new();
@@ -1278,20 +1315,25 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                             SII2 clonedReader = SII2SiiNDecoder.Decode(saveToClone);
                             Game2 cloned = new(clonedReader);
 
-                            foreach (var vehicle in units) {
-                                vehicle.Unit.___detach_do_not_use(); // In this function, same units are attached to multiple saves. Since old save files aren't used after saving, we can safely move units to new save.
+                            foreach (var _vehicle in units) {
+                                _vehicle.Unit.___detach_do_not_use(); // In this function, same units are attached to multiple saves. Since old save files aren't used after saving, we can safely move units to new save.
                             }
 
                             cloned.AddAll(units);
 
                             Entity2 player = cloned.EntityType("player")!;
 
+                            Entity2 vehicle;
+                            if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                                MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                                return;
+                            }
+
                             // Add the vehicle to truck list
                             player.ArrayAppend("trucks", keys[0]);
 
                             // Activate the truck
-                            player.Set("assigned_truck", keys[0]);
-                            player.Set("my_truck", keys[0]);
+                            vehicle.Set("vehicle", keys[0]);
 
                             // Prevent game CTD bug
                             string dummyPfLogId = cloned.GenerateNewID();
@@ -1305,8 +1347,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                             if (keys.Length == 2) { // Add the vehicle to trailer list
                                 player.ArrayAppend("trailers", keys[1], true);
 
-                                player.Set("assigned_trailer", keys[1]);
-                                player.Set("my_trailer", keys[1]);
+                                vehicle.Set("trailer", keys[1]);
 
                                 string trailerDefId = (from a in units where a.Unit.Id == keys[1] select a).First().GetValue("trailer_definition");
 
@@ -1314,28 +1355,28 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                                     player.ArrayAppend("trailer_defs", trailerDefId, true);
                                 }
                             } else {
-                                player.Set("assigned_trailer", "null");
-                                player.Set("my_trailer", "null");
+                                vehicle.Set("trailer", "null");
                             }
 
                             // copy paste of InjectLocation
                             {
                                 var decoded = (from a in positionData.Positions select SCSSpecialString.EncodeFloatPositionToHex(a)).ToArray();
                                 if (decoded.Length >= 1) {
-                                    player.Set("truck_placement", decoded[0]);
+                                    vehicle.Set("stored_vehicle_placement", decoded[0]);
                                 }
                                 if (decoded.Length >= 2) {
-                                    player.Set("trailer_placement", decoded[1]);
+                                    vehicle.Set("stored_trailer_placements", [.. decoded.Skip(1)]);
                                 } else {
-                                    player.Set("trailer_placement", decoded[0]);
+                                    vehicle.Set("stored_trailer_placements", decoded);
                                 }
-                                if (decoded.Length > 2) {
+
+                                /*if (decoded.Length > 2) {
                                     player.Set("slave_trailer_placements", [.. decoded.Skip(2)]);
                                 } else {
                                     player.Set("slave_trailer_placements", "0");
-                                }
+                                }*/
 
-                                player.Set("assigned_trailer_connected", positionData.TrailerConnected ? "true" : "false");
+                                vehicle.Set("stored_trailer_attached", positionData.TrailerConnected ? "true" : "false");
                             }
 
                             File.WriteAllText(newPath + @"\game.sii", cloned.ToString());
@@ -1660,7 +1701,13 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                 try {
                     var player = saveGame.EntityType("player")!;
 
-                    var assignedTrailerId = player.GetValue("assigned_trailer");
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
+                    var assignedTrailerId = vehicle.GetValue("trailer");
                     if (assignedTrailerId == "null") {
                         MessageBox.Show("You don't have an assigned trailer.", Texts.Common_Message_Error_Title);
                         return;
