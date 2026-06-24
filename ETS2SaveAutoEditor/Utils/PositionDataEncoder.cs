@@ -219,8 +219,9 @@ namespace ASE.Utils {
             BinaryReader bs2 = new(ms2);
 
             // Data exchange
-            static (byte, int, int, int) ReceivePoint() {
+            (byte, int, int, int) ReceivePoint() {
                 Span<byte> buf = stackalloc byte[13];
+                bs2.BaseStream.ReadExactly(buf);
                 byte a = buf[0];
                 int b = BinaryPrimitives.ReadInt32LittleEndian(buf[1..5]);
                 int c = BinaryPrimitives.ReadInt32LittleEndian(buf[5..9]);
