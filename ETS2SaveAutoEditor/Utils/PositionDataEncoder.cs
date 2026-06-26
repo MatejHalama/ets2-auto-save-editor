@@ -48,7 +48,7 @@ namespace ASE.Utils {
             }
 
             // Header byte
-            ms2.WriteByte((byte)((data.Positions.Count & 0b00111111) | (data.TrailerConnected ? 0b01000000 : 0) | (data.MinifiedOrientation ? 0b10000000 : 0)));
+            ms2.WriteByte((byte)((data.Positions.Count & 0b00111111) | (data.TrailerConnected ? 0b10000000 : 0) | (data.MinifiedOrientation ? 0b01000000 : 0)));
             foreach (float[] p in data.Positions) {
                 sendPlacement(p);
             }
