@@ -92,10 +92,10 @@ namespace ASE {
             addAction(SaveeditTasks.ReducePosition());
             addAction(SaveeditTasks.DecodePosition());
             addAction(tasks.ConnectTrailerInstantly());
-            //addAction(tasks.TeleportToCargo());  //need to be repaired after 1.60
+            addAction(tasks.TeleportToCargo());
             addAction(tasks.VehicleSharingTool(currentGame));
             addAction(tasks.SpecialCCTask(currentGame));
-            //addAction(tasks.CompanyVehicleStealTool());  //need to be repaired after 1.60
+            addAction(tasks.CompanyVehicleStealTool());
             addAction(tasks.ChangeCargoMass());
         }
 

@@ -780,9 +780,16 @@ namespace ASE {
                     return;
                 }
 
-                var companyTruck = job.GetValue("company_truck");
+                Entity2 vehicle;
+                if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                    MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                    return;
+                }
 
-                var assignedTruck = player.GetValue("assigned_truck");
+                var companyTruck = job.GetValue("company_truck");
+                var companyTailer = job.GetValue("company_trailer");
+
+                var assignedTruck = vehicle.GetValue("vehicle");
 
                 bool isQuickJob = companyTruck == assignedTruck;
                 bool teleportToDestination = true;
@@ -834,19 +841,19 @@ namespace ASE {
                         scsPlacement.Orientation *= Vector3.UnitY.AsAxisAngleDegrees(180);
                     }
 
-                    player.Set("truck_placement", targetPlacement);
+                    vehicle.Set("stored_vehicle_placement", targetPlacement);
                     //player.Set("trailer_placement", targetPlacement);
                 } else {
-                    var truckPlacement = player.GetValue("truck_placement");
-                    player.Set("trailer_placement", truckPlacement);
+                    var truckPlacement = vehicle.GetValue("stored_vehicle_placement");
+                    vehicle.Set("stored_trailer_placements", truckPlacement);
                 }
 
-                player.Set("slave_trailer_placements", "0");
+                //player.Set("slave_trailer_placements", "0");
                 //player.Set("assigned_trailer_connected", "true");
 
-                if (player.GetValue("my_truck") != "null") {
-                    player.Set("assigned_truck", player.GetValue("my_truck"));
-                }
+                //if (player.GetValue("my_truck") != "null") {
+                //    player.Set("assigned_truck", player.GetValue("my_truck"));
+                //}
                 // Using this tool with trailer attached results in TMP account suspension due to trailers clipping into buildings.
                 // Therefore, we're forcing the trailer to be detached.
                 //if (player.GetValue("my_trailer") != "null") {
@@ -855,11 +862,12 @@ namespace ASE {
                 //    player.Set("assigned_trailer", "null");
                 //}
                 //player.Set("my_trailer", "null");
-                player.Set("assigned_trailer", "null");
-                player.Set("assigned_trailer_connected", "false");
+                if (companyTailer != "null")
+                    vehicle.Set("trailer", "null");
+                vehicle.Set("stored_trailer_attached", "false");
 
                 bool trailerTeleportWarning = false;
-                if (player.GetValue("my_trailer") != "null") {
+                if (vehicle.GetValue("trailer") != "null") {
                     trailerTeleportWarning = true;
                 }
 
@@ -1576,8 +1584,14 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                         return;
                     }
 
+                    Entity2 vehicle;
+                    if (!player.TryGetPointer("assigned_vehicles", out vehicle!)) {
+                        MessageBox.Show("You don't have any truck assigned.", Texts.Common_Message_Error_Title);
+                        return;
+                    }
+
                     // Job truck
-                    var currentTruckId = player.GetValue("assigned_truck");
+                    var currentTruckId = vehicle.GetValue("vehicle");
                     var isCurrentTruckStealable = job.GetValue("company_truck") == currentTruckId;
                     if (currentTruckId == "null") {
                         MessageBox.Show("You don't have a truck active.", Texts.Common_Message_Error_Title);
@@ -1585,7 +1599,7 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                     }
 
                     // Job trailer
-                    var currentTrailerId = player.GetValue("assigned_trailer");
+                    var currentTrailerId = vehicle.GetValue("trailer");
                     var isCurrentTrailerStealable = job.GetValue("company_trailer") == currentTrailerId;
                     if (currentTrailerId == "null") {
                         MessageBox.Show("You don't have a trailer connected.", Texts.Common_Message_Error_Title);
@@ -1615,16 +1629,17 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                     }
 
                     // Return to last position of owned truck, if exists
-                    player.Set("assigned_truck", player.GetValue("my_truck"));
-                    if (player.GetValue("my_truck_placement_valid") == "true") {
-                        player.Set("truck_placement", player.GetValue("my_truck_placement"));
-                        if (player.Contains("my_trailer_placement")) {
-                            player.Set("trailer_placement", player.GetValue("my_trailer_placement"));
-                        }
-                        if (player.Contains("my_slave_trailer_placements")) {
-                            player.Set("slave_trailer_placements", player.GetArray("my_slave_trailer_placements"));
-                        }
-                    }
+                    //player.Set("assigned_truck", player.GetValue("my_truck"));
+                    //if (player.GetValue("my_truck_placement_valid") == "true") {
+                    //    player.Set("truck_placement", player.GetValue("my_truck_placement"));
+                    //    if (player.Contains("my_trailer_placement")) {
+                    //        player.Set("trailer_placement", player.GetValue("my_trailer_placement"));
+                    //    }
+                    //    if (player.Contains("my_slave_trailer_placements")) {
+                    //        player.Set("slave_trailer_placements", player.GetArray("my_slave_trailer_placements"));
+                    //    }
+                    //}
+                    vehicle.Set("vehicle", "null");
 
                     if (stealTruck && stealTrailer)
                         stealTrailer = MessageBox.Show("Do you want to steal the trailer?", "Own Job Vehicle", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
@@ -1647,13 +1662,14 @@ This actually has nothing to do with event CC tools. If you run this, ASE will i
                         CommonEdits.DeleteUnitRecursively(s, CommonEdits.KNOWN_PTR_ITEMS_TRAILER);
                     }
 
-                    if (player.GetValue("my_trailer_attached") == "true") {
-                        player.Set("assigned_trailer", player.GetValue("my_trailer"));
-                        player.Set("assigned_trailer_connected", "true");
-                    } else {
-                        player.Set("assigned_trailer", "null");
-                        player.Set("assigned_trailer_connected", "false");
-                    }
+                    //if (player.GetValue("my_trailer_attached") == "true") {
+                    //    player.Set("assigned_trailer", player.GetValue("my_trailer"));
+                    //    player.Set("assigned_trailer_connected", "true");
+                    //} else {
+                    //    player.Set("assigned_trailer", "null");
+                    //    player.Set("assigned_trailer_connected", "false");
+                    //}
+                    vehicle.Set("trailer", "null");
 
                     // Special transport
                     if (job.TryGetPointer("special", out Entity2? special)) {
